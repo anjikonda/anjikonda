@@ -1,0 +1,230 @@
+# Chapter 06 — Web Application Security
+
+**Written by Anji | Hyderabad, India**
+**Level — Beginner | Reading time — 22 minutes**
+
+---
+
+Web applications are everywhere. Every service you use — banking, shopping, government portals, social media — runs as a web application. They are also where the majority of real-world breaches happen.
+
+This chapter covers the most common and impactful web vulnerabilities, how they work, and how to find them using Burp Suite and free practice labs. Everything here builds on the tools introduced in Chapter 04. If you have not yet set up Burp Suite, go back and do that first.
+
+The best free resource for everything in this chapter is the **PortSwigger Web Security Academy** at https://portswigger.net/web-security. It was built by the same people who made Burp Suite, it is completely free, and every topic comes with a hands-on lab using a real vulnerable application. This chapter will direct you to specific labs throughout.
+
+---
+
+## Setting Up Burp Suite as a Proxy
+
+Before you can test web applications, you need Burp Suite intercepting your browser traffic. Here is the setup:
+
+1. Open Burp Suite Community Edition (pre-installed on Kali, or download from https://portswigger.net/burp/communitydownload)
+2. Go to **Proxy → Intercept** and make sure intercept is turned **off** for now — you want to browse normally but have Burp recording traffic
+3. Go to **Proxy → Options** and note the listener address — by default it is `127.0.0.1:8080`
+4. In Firefox, go to **Settings → Network Settings → Manual Proxy Configuration** and set HTTP Proxy to `127.0.0.1` port `8080`
+5. Install the PortSwigger CA certificate in Firefox so HTTPS traffic is visible — Burp's Proxy Options page explains exactly how
+
+Once this is set up, every request your browser makes passes through Burp. You can see it in the **HTTP History** tab. This view alone — just reading the raw requests and responses — teaches you an enormous amount about how web applications work.
+
+---
+
+## OWASP Top 10
+
+The **OWASP Top 10** is the industry-standard list of the most critical web application vulnerabilities, published by the Open Web Application Security Project at https://owasp.org. Every web security professional knows this list.
+
+The current list (2021 edition) covers:
+
+1. Broken Access Control
+2. Cryptographic Failures
+3. Injection (SQL, Command, LDAP, and others)
+4. Insecure Design
+5. Security Misconfiguration
+6. Vulnerable and Outdated Components
+7. Identification and Authentication Failures
+8. Software and Data Integrity Failures
+9. Security Logging and Monitoring Failures
+10. Server-Side Request Forgery (SSRF)
+
+This chapter covers the ones you are most likely to encounter and can practically test as a beginner.
+
+---
+
+## SQL Injection
+
+SQL injection is one of the oldest web vulnerabilities and still one of the most common. It happens when a web application takes input from a user and includes it directly in a database query without properly handling it.
+
+Here is what this looks like. A login form might construct a database query like this:
+
+```sql
+SELECT * FROM users WHERE username = 'INPUT' AND password = 'INPUT'
+```
+
+If the application inserts your input directly without sanitisation, you can manipulate the query itself. Entering `admin'--` as the username changes the query to:
+
+```sql
+SELECT * FROM users WHERE username = 'admin'--' AND password = 'anything'
+```
+
+The `--` is a SQL comment. Everything after it is ignored. The password check disappears. You log in as admin without knowing the password.
+
+This is a simple example. Real SQL injection can allow an attacker to extract entire databases, bypass authentication, read files from the server, and in some configurations execute operating system commands.
+
+**How to find it:** Look for any input that appears to interact with a database — login forms, search boxes, URL parameters. Enter a single quote `'` and watch for error messages. An error containing SQL syntax suggests the input is going directly into a query.
+
+In Burp Suite's HTTP History, right-click any request and send it to **Repeater**. There you can modify parameters and resend requests manually, watching exactly how the application responds to different inputs.
+
+SQLmap from Chapter 04 automates the exploitation process. But learn to find and confirm SQL injection manually first — understanding the underlying technique makes you a better tester than relying on automation alone.
+
+**Practice:** https://portswigger.net/web-security/sql-injection — start with apprentice-level labs and work through them in order.
+
+**The fix:** Parameterised queries (prepared statements) completely prevent SQL injection by separating query structure from user input. Any developer reading this should use them.
+
+---
+
+## Cross-Site Scripting (XSS)
+
+Cross-site scripting happens when an application includes user-supplied data in a web page without properly encoding it, allowing an attacker to inject JavaScript that executes in other users' browsers.
+
+There are three types:
+
+**Reflected XSS** — the malicious script is in the URL or request, and the application reflects it back in the response. The victim must click a crafted link. If you can get `<script>alert(1)</script>` to execute in a page, you have demonstrated reflected XSS.
+
+**Stored XSS** — the malicious script is saved in the application's database (in a comment, profile field, or message) and executes for every user who views that content. This is more dangerous because no crafted link is needed — anyone visiting the page is affected.
+
+**DOM-based XSS** — the vulnerability is in client-side JavaScript that writes user-controlled data to the page unsafely, without the data ever going to the server.
+
+Why does XSS matter? An attacker who can run JavaScript in another user's browser can steal their session cookies (hijacking their account), redirect them to fake login pages, log everything they type, or perform actions as that user on any site they are logged into.
+
+**How to find it:** Look for anywhere user input is reflected in a page — search results, profile pages, comment sections. Enter `<script>alert(1)</script>` and see if it executes or appears as escaped plain text.
+
+**Practice:** https://portswigger.net/web-security/cross-site-scripting
+
+**The fix:** Encode all user-supplied output before including it in HTML. Implement a Content Security Policy header to limit what scripts can execute.
+
+---
+
+## Broken Access Control
+
+Access control determines what authenticated users are allowed to do. Broken access control means users can do things they should not — access other users' data, perform admin functions, or escalate privileges.
+
+This is the number one vulnerability on the OWASP Top 10. It is extremely common and often simple to find.
+
+**Insecure Direct Object References (IDOR)** are the most common form. You are logged in as user 1001 and your profile is at `/profile?id=1001`. What happens when you change the URL to `/profile?id=1002`? If you can see or edit another user's profile, that is an IDOR vulnerability.
+
+This pattern appears everywhere — order confirmations with sequential IDs, invoice downloads with predictable filenames, API endpoints that return data based on a parameter without verifying the requester is authorised.
+
+**Horizontal privilege escalation** means accessing resources belonging to another user at the same privilege level. **Vertical privilege escalation** means accessing resources that require higher privileges — for example, accessing admin functionality as a regular user.
+
+**How to find it:** Any time you see an ID, number, or filename in a URL or request parameter, test whether changing it gives you access to something you should not have. Also test whether non-admin users can access admin URLs directly — try `/admin`, `/admin/users`, `/admin/settings`. Many applications hide these links but do not enforce access controls on the actual endpoints.
+
+**Practice:** https://portswigger.net/web-security/access-control
+
+---
+
+## Authentication Vulnerabilities
+
+Authentication is how an application verifies who you are. Vulnerabilities here let attackers bypass login or take over accounts.
+
+**No lockout policy** — as demonstrated by Hydra in Chapter 04, applications without account lockout after failed attempts are vulnerable to brute-force. An application should lock or slow logins after a small number of failures.
+
+**Username enumeration** — an application that returns "incorrect password" for a valid username but "user not found" for an invalid one leaks information. An attacker can use this to build a list of valid usernames before attempting to crack passwords.
+
+**Insecure password reset** — password reset flows are a common weak point. Predictable reset tokens, tokens that never expire, links that work even after being used once — all of these have been exploited in real attacks.
+
+**How to find it:** Pay close attention to error messages during login — do they reveal whether the username or password was wrong? Test password reset flows carefully. Check whether session cookies change after login (they should, to prevent session fixation). Use Burp Intruder to test for brute-force protection.
+
+**Practice:** https://portswigger.net/web-security/authentication
+
+---
+
+## Security Misconfiguration
+
+This broad category covers all the ways a correctly-designed system can be deployed incorrectly.
+
+Default credentials left unchanged. Error messages that reveal stack traces or file paths. Directory listing enabled, allowing anyone to browse server files. Cloud storage buckets left publicly accessible. Security misconfiguration is often the easiest vulnerability to find because it requires no exploitation — just observation.
+
+**Things to check for:**
+
+- **Error pages** — trigger errors by entering unexpected input, accessing non-existent pages, or sending malformed requests. Do the error messages reveal software versions, file paths, or database names?
+- **Response headers** — inspect with Burp. A `Server: Apache/2.4.1` header reveals an exact version. Missing security headers like `X-Frame-Options`, `Content-Security-Policy`, and `Strict-Transport-Security` are informational findings worth noting.
+- **robots.txt** — this file tells search engines what not to index, and often reveals hidden paths the developer did not want publicised.
+- **Default paths** — try `/admin`, `/phpmyadmin`, `/wp-admin`, `/.git`, `/.env`. These are commonly forgotten and commonly exploited.
+- **Nikto** from Chapter 04 automates many of these checks in minutes.
+
+**Practice:** https://portswigger.net/web-security/information-disclosure
+
+---
+
+## Command Injection
+
+Command injection occurs when an application passes user-supplied input to a system shell command without sanitisation. If the application runs `ping INPUT` and you enter `8.8.8.8; whoami`, both commands may execute — and you will see the output of `whoami` in the response.
+
+Command injection is one of the most critical vulnerabilities. Successful exploitation typically gives direct access to the underlying server.
+
+**How to find it:** Look for features that interact with the operating system — IP lookup tools, domain queries, file conversion utilities, image processing features. Test with payloads like `; ls`, `| whoami`, or `&& id` appended to expected input.
+
+**Practice:** https://portswigger.net/web-security/os-command-injection
+
+---
+
+## File Upload Vulnerabilities
+
+Many web applications allow file uploads — profile pictures, documents, attachments. Insecure upload handling is a serious vulnerability.
+
+The most dangerous form is uploading a web shell — a script file that, when accessed through the browser, executes commands on the server. If the application allows PHP uploads and the server executes PHP, uploading a file containing `<?php system($_GET['cmd']); ?>` and then accessing it through the browser gives complete server control.
+
+Applications often try to restrict uploads by checking the file extension or the content-type header sent by the browser. Both can be bypassed with Burp Suite's Intercept by modifying the request in transit.
+
+**How to find it:** Any file upload feature is worth testing. Try uploading unexpected file types, double extensions like `shell.php.jpg`, and changing the content-type header of a PHP file to `image/jpeg` to see if the application accepts it based on the header rather than the actual content.
+
+**Practice:** https://portswigger.net/web-security/file-upload
+
+---
+
+## Using Burp Suite Effectively
+
+Beyond intercepting traffic, Burp Suite has several features that make testing systematic.
+
+**Repeater** — modify a request and resend it, watching the response change. Essential for manually testing different payloads. Right-click any request in HTTP History and send it to Repeater.
+
+**Intruder** — automate sending many requests with different payloads. Use for testing lists of credentials, fuzzing parameters, or testing sequential IDs for IDOR. The Community Edition rate-limits Intruder, but it still works for learning.
+
+**Decoder** — encode and decode data in Base64, URL encoding, HTML encoding, hex. Tokens and parameters are often encoded, and Decoder lets you read and modify them.
+
+**Comparer** — compare two responses side by side, highlighting differences. Useful for spotting whether a small change in a request produces a meaningfully different response.
+
+**Target → Site Map** — as you browse an application, Burp builds a complete map of every page and parameter it has seen.
+
+The key habit: before actively testing anything, browse the entire application normally with Burp running and intercept off. Explore every feature, form, and page. Let Burp build a complete site map. Then go back through the map systematically, testing every parameter you can find.
+
+---
+
+## DVWA — Damn Vulnerable Web Application
+
+For local practice without internet, **DVWA** (Damn Vulnerable Web Application) is a PHP application deliberately built with every common vulnerability. It has difficulty settings — low, medium, and high — that adjust how obvious the vulnerabilities are.
+
+Install it on Kali using `sudo apt install dvwa` or download from https://github.com/digininja/DVWA.
+
+DVWA lets you practice SQL injection, XSS, command injection, file upload, CSRF, and more in a completely safe offline environment. After exploiting each vulnerability at low difficulty, switch to medium and try again — it forces you to bypass basic defences and builds a much deeper understanding.
+
+---
+
+## A Practical Learning Path for This Chapter
+
+Do not try to learn all of these vulnerability types at once. Go deep on one at a time.
+
+**Week 1 — SQL Injection:** Complete every apprentice-level SQL injection lab on the Web Security Academy. Practice using Burp Repeater to test manually before using SQLmap.
+
+**Week 2 — XSS:** Complete the reflected and stored XSS apprentice labs. Understand the difference between all three types. Practice in DVWA at low difficulty, then medium.
+
+**Week 3 — Access Control:** Complete the IDOR and access control labs. This is the most impactful category for bug bounty work — build strong intuition for it.
+
+**Week 4 — Authentication:** Complete the authentication labs. Set up a local login form and practice Hydra against it to understand what brute-force protection actually prevents.
+
+One hour a day, every day, for a month. By the end of it, you will have a level of practical web security understanding that most people who have only read about this topic will not have.
+
+---
+
+ 
+
+*Written by Anji | Hyderabad, India | 2025*
+*If this helped you, please star the repository.*
