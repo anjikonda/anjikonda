@@ -1,0 +1,161 @@
+# Chapter 05 — Ethical Hacking Methodology
+
+**Written by Anji | Hyderabad, India**
+**Level — Beginner | Reading time — 18 minutes**
+
+---
+
+Every penetration tester follows a methodology. Not because someone wrote rules and forced them to, but because a structured approach is the only way to work thoroughly and professionally. Without a methodology, you miss things. You skip steps. You get distracted by interesting findings and forget to document them properly.
+
+This chapter explains the five phases of ethical hacking — the mental framework that every professional penetration tester uses, whether they are testing a large bank in Mumbai or a small startup in Hyderabad. Understanding this framework turns a collection of tools into a coherent process.
+
+Before anything else — one rule that applies to every single phase described in this chapter. You must have written permission before testing any system you do not personally own. Not verbal permission. Not implied permission. Written permission, clearly stating what you are authorised to test, what you are not, and during what time window. Without this, everything in this chapter is illegal under the Information Technology Act, 2000. With it, you are doing exactly what organisations pay professionals to do.
+
+---
+
+## The Five Phases
+
+### Phase 1 — Reconnaissance
+
+Reconnaissance means gathering information about your target before you touch it with any scanning tool. The goal is to learn as much as possible using only publicly available information, leaving no trace on the target's systems.
+
+This is called passive reconnaissance. You are not sending a single packet to the target. You are reading what is already publicly visible.
+
+What can you find through passive reconnaissance?
+
+**WHOIS records** tell you who registered a domain, when, and sometimes contact information. Run `whois target.com` in your terminal or visit https://who.is.
+
+**DNS records** reveal the structure of a network. The `dig` command is your tool here. `dig target.com ANY` returns all DNS records — A records pointing to IP addresses, MX records showing mail servers, NS records showing name servers. Each one tells you something about the target's infrastructure.
+
+**Google Dorking** uses advanced Google search operators to find things that were accidentally made public. `site:target.com filetype:pdf` finds all PDFs on a domain. `site:target.com inurl:admin` looks for admin pages. `site:target.com "password"` sometimes finds configuration files or documentation that should never have been indexed. The Google Hacking Database at https://www.exploit-db.com/google-hacking-database is a collection of useful dorks.
+
+**Shodan** at https://www.shodan.io is a search engine for internet-connected devices. Instead of searching web content, it searches for open ports and services. You can find web servers, cameras, routers, and industrial systems exposed to the internet, often running outdated software with known vulnerabilities. A free account gives you basic search access.
+
+**LinkedIn and social media** reveal employee names, job titles, technologies used, and sometimes direct email formats. Knowing that a company uses a specific HR software or that their developers post about a particular framework is useful intelligence.
+
+**theHarvester** is a Kali tool that automates much of this. It collects email addresses, names, subdomains, IPs, and URLs from public sources. Run `theHarvester -d target.com -b google` to gather information from Google about a domain.
+
+The discipline of passive reconnaissance is taking time to really understand your target before you make noise. Professionals spend significant time here. Beginners skip it and go straight to scanning. That difference shows in the quality of their work.
+
+---
+
+### Phase 2 — Scanning and Enumeration
+
+Now you begin actively probing the target. This leaves traces. This is why written permission matters — this phase is detectable.
+
+Scanning has two parts: discovering what exists, and then enumerating the details of what you found.
+
+**Port scanning with Nmap** is how you discover what services are running. You covered Nmap in Chapter 04. In a professional engagement, you would start with a fast scan of common ports, then follow up with a thorough scan of all 65535 ports. Do not assume that a service is only on its default port. SSH sometimes runs on port 2222. Web servers sometimes run on port 8080 or 8443.
+
+```
+nmap -sV -sC -p- --open 192.168.1.1
+```
+
+The `-p-` scans all ports. The `--open` shows only open ports. The `-sC` runs default scripts that do basic enumeration automatically.
+
+**Enumeration** means extracting detailed information from services you have found. Once you know a port is open and a service is running, you dig deeper.
+
+For a web server, enumeration means identifying the software and version, finding directories with Gobuster, and reading response headers for framework information. For an SMB share on a Windows machine, enumeration means finding what shares are accessible, who the users are, and what policies are in place. For SSH, it means confirming the exact version, which can be matched against known vulnerabilities.
+
+**Vulnerability scanning with Nikto or OpenVAS** automates the process of checking whether known vulnerabilities exist on the services you have found. These tools compare the software versions they detect against databases of known vulnerabilities and flag potential issues. Nikto is fast and simple for web servers. OpenVAS (part of Greenbone Vulnerability Manager, free) is more thorough for full network assessments.
+
+The output of this phase should be a clear, documented picture of every service running on the target, every version you could identify, and every potential weakness you spotted. This becomes the input for the next phase.
+
+---
+
+### Phase 3 — Gaining Access (Exploitation)
+
+This is the phase that most beginners fixate on. In reality, it is often the most straightforward phase if the previous two were done thoroughly. By the time you reach here, you know exactly what is running and what known vulnerabilities exist. Exploitation is often a matter of matching what you found to a known technique.
+
+This phase is where Metasploit comes in, as discussed in Chapter 04. You find a service running a vulnerable version, locate the matching Metasploit module, configure it with the target details, and run it.
+
+But not all exploitation is automated.
+
+**Default credentials** are embarrassingly common in real environments. Many organisations install devices and never change the default username and password. A quick check against a list of known defaults — or using Hydra from Chapter 04 against a login page — reveals these. Routers, printers, IP cameras, and admin panels are frequent offenders.
+
+**Weak web application security** is the most common path into modern systems. SQL injection, cross-site scripting, broken authentication, insecure file uploads — these are the vulnerabilities that Chapter 06 covers in depth.
+
+**Unpatched software** is the bread and butter of exploitation. When a vulnerability is discovered in a piece of software and a patch is released, organisations that have not applied that patch remain vulnerable. This is why update management matters enormously.
+
+One important concept: **proof of concept, not damage**. In ethical hacking, once you have demonstrated that a vulnerability is exploitable — you have gained access, shown you can execute a command, confirmed the vulnerability is real — you stop. You do not read private data. You do not modify anything. You do not escalate further than needed to demonstrate the risk. You document what you found and move on.
+
+This is the line between a penetration tester and an attacker.
+
+---
+
+### Phase 4 — Post-Exploitation
+
+Once access is gained, a professional penetration test explores what that access would allow a real attacker to do. This demonstrates the full business impact, not just the technical fact that access was possible.
+
+**Privilege escalation** is moving from a low-privilege account to administrator or root. Real attackers do this because low-privilege access is limited. Common techniques include finding misconfigured file permissions, exploiting overly permissive sudo rules, finding credentials in configuration files, or exploiting unpatched kernel vulnerabilities.
+
+**Lateral movement** means using access to one machine to gain access to others on the same network. Demonstrating this to a client shows that their internal network segmentation is insufficient — one compromised machine should not be a stepping stone to everything else.
+
+**Data that would be accessible** is the key deliverable here. If you reached a database server and could have extracted customer records, say so. If you found financial data on a file server, document it. The client needs to understand not just "someone could get in" but "someone could get in and take this specific data."
+
+---
+
+### Phase 5 — Reporting
+
+This is the phase that separates professional penetration testers from everyone else, and the phase that most beginners pay least attention to.
+
+Everything you discovered is worthless unless it is communicated clearly to the people who need to act on it. A penetration test report will be read by technical staff who need to fix things, and by management who need to understand the risk.
+
+A professional report has two sections.
+
+**Executive summary** — written for non-technical readers. What was tested, what was found at a high level, what the overall risk picture looks like, and what the most important recommendations are. No jargon. A CEO should be able to read this and understand whether their organisation is in serious trouble.
+
+**Technical findings** — written for the people who will fix the issues. Each finding should include the vulnerability name and severity, exactly where it was found, step-by-step proof of exploitation, screenshots demonstrating impact, a specific recommendation to fix it, and references to relevant CVEs or OWASP entries.
+
+Severity is typically rated using CVSS (Common Vulnerability Scoring System), which scores vulnerabilities from 0 to 10 based on exploitability and potential impact — Critical, High, Medium, Low, and Informational.
+
+**Practice writing findings now**, even while you are learning. When you find a vulnerability in a TryHackMe room, write it up as if submitting it to a client. This habit, built early, will make you significantly more employable.
+
+---
+
+## Scope and Rules of Engagement
+
+Every professional engagement begins with a document defining:
+
+- **In scope** — what IP ranges, domains, and systems you are permitted to test
+- **Out of scope** — what you must not touch, often production databases or third-party services
+- **Testing window** — when you are permitted to test
+- **Emergency contact** — who to call if you accidentally cause an outage or find something critical
+- **Reporting requirements** — format and deadline
+
+Staying within scope is not optional. Testing systems outside scope — even accidentally — can void your legal protection. If during a test you discover systems appear connected to out-of-scope infrastructure, stop, document it, and notify your contact.
+
+---
+
+## Bug Bounty Programmes
+
+If you do not yet have clients, bug bounty programmes let you practice on real systems legally and get paid when you find valid vulnerabilities.
+
+Companies publish programmes explicitly defining which systems you may test, what vulnerability types they accept, and payment amounts. Critical findings can pay lakhs of rupees.
+
+**HackerOne** at https://hackerone.com and **Bugcrowd** at https://bugcrowd.com are the two largest platforms. Start with programmes that have large scopes — more assets means more opportunities. Begin with low-hanging fruit: information disclosure, misconfigured headers, exposed sensitive files.
+
+Read disclosed reports from other researchers on HackerOne to understand what real findings look like and how they are written. This is some of the best free education available.
+
+---
+
+## Capture the Flag Competitions
+
+CTFs are competitions where you solve hacking challenges to find hidden flags — strings of text proving you completed a challenge.
+
+**PicoCTF** at https://picoctf.org is the best starting point for complete beginners. **CTFtime** at https://ctftime.org lists upcoming competitions worldwide. **TryHackMe** rooms are essentially guided CTF challenges with hints — start there before competitive CTFs.
+
+When stuck, look for writeups — blog posts where participants explain their solutions. Reading how someone solved a problem you could not is one of the best ways to learn.
+
+---
+
+## What Comes Next
+
+You now understand how tools fit into a professional process. The next chapter focuses on web application security in depth — the vulnerabilities, how to find them, and how to use Burp Suite and the PortSwigger Web Security Academy to build real skill.
+
+**[Continue to Chapter 06 — Web Application Security →](./06-web-security.md)**
+
+---
+
+*Written by Anji | Hyderabad, India | 2025*
+*If this helped you, please star the repository.*
